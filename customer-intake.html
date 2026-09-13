@@ -1191,7 +1191,7 @@ input::placeholder{color:#A9BCB9;}
            to something of their own. -->
       <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--line);">
         <h2 style="margin:0 0 4px;">Your sign-in</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">What you type on the sign-in screen of the technician and admin apps. Change these from the ones you were given.</p>
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">What you type to open this site. It is yours alone &mdash; your technicians sign in to the field apps with their own usernames, set on the Technicians page, and cannot open this site.</p>
 
         <div class="field">
           <label>Username</label>
@@ -1877,27 +1877,20 @@ function lsSet(key, value){
   }
 }
 
-// ---------- Beta tester accounts ----------
-// There is no server yet, so accounts cannot be pushed to anyone's device.
-// Instead each beta build carries the accounts for the people testing it: the
-// first time the app opens on a device with no technicians set up, these are
-// created. After that the device's own list wins and this is ignored, so a
-// tester who renames themselves or adds staff keeps those changes.
+// ---------- The owner account ----------
+// Separate from technicians on purpose. This is the login for the office site,
+// where customers, routes, pricing and settings live. Technicians sign in to
+// the field apps with their own accounts and cannot open the site at all.
 //
-// To add or change a tester: edit this list, commit, and tell them to reload.
-// Remove the whole block before any real launch — passwords in a public file
-// are fine for four known testers and nothing beyond that.
-const BETA_ACCOUNTS = [
-  {id: 'beta_owner', name: 'Owner', username: 'poollog', password: 'letmein', requireAfterPhoto: true}
-];
+// Seeded once on a device that has no owner set, then changed under
+// Account > Plan. Remove this starter before any real launch.
+const STARTER_OWNER = {name: 'Owner', username: 'poollog', password: 'letmein'};
 
-(function seedBetaAccounts(){
+(function seedOwnerAccount(){
   try{
-    if(!Array.isArray(BETA_ACCOUNTS) || !BETA_ACCOUNTS.length) return;
-    const existing = lsGet('technicians');
-    // Only ever on a fresh device. Never overwrite a real list.
-    if(Array.isArray(existing) && existing.length) return;
-    lsSet('technicians', BETA_ACCOUNTS.map(a => Object.assign({}, a)));
+    const existing = lsGet('ownerAccount');
+    if(existing && existing.username) return;
+    lsSet('ownerAccount', Object.assign({}, STARTER_OWNER));
   }catch(e){}
 })();
 
@@ -5526,7 +5519,7 @@ function hideSiteLogin(){
 }
 
 function siteLogout(){
-  lsSet('session', null);
+  lsSet('ownerSession', false);
   siteUser = null;
   const u = document.getElementById('siteUsername');
   const p = document.getElementById('sitePassword');
@@ -5541,26 +5534,29 @@ function attemptSiteLogin(){
 
   const u = document.getElementById('siteUsername').value.trim().toLowerCase();
   const p = document.getElementById('sitePassword').value;
-  const techs = lsGet('technicians') || [];
+  const owner = lsGet('ownerAccount');
 
-  if(!techs.length){ say('No accounts set up on this device yet.'); return; }
+  if(!owner || !owner.username){ say('No owner account set up on this device yet.'); return; }
 
-  const match = techs.find(t => (t.username || '').toLowerCase() === u && t.password === p);
-  if(!match){ say("That username and password don't match."); return; }
+  // Only the owner. A technician's login is for the field apps and must not
+  // open the office site — they would see every customer and every setting.
+  if((owner.username || '').toLowerCase() !== u || owner.password !== p){
+    say("That username and password don't match.");
+    return;
+  }
 
   if(err) err.style.display = 'none';
-  lsSet('session', {techId: match.id});
-  siteUser = match;
+  lsSet('ownerSession', true);
+  siteUser = owner;
   document.getElementById('sitePassword').value = '';
   hideSiteLogin();
 }
 
 function guardSiteSession(){
-  const saved = lsGet('session');
-  const techs = lsGet('technicians') || [];
-  const who = saved ? techs.find(t => t.id === saved.techId) : null;
-  if(who){
-    siteUser = who;
+  // Its own session key, so signing in to a field app does not open the site
+  const owner = lsGet('ownerAccount');
+  if(lsGet('ownerSession') && owner && owner.username){
+    siteUser = owner;
     hideSiteLogin();
     return true;
   }
@@ -5576,35 +5572,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
   guardSiteSession();
 });
 
-// ---------- Your own sign-in ----------
-// Everyone starts on the same account that ships with the app, so the point of
-// this is to replace it with something only they know. It edits the account
-// itself, which is what the sign-in screen checks, so the change takes effect
-// the moment it is saved.
-// Works on the page's own technicians array, not a fresh copy from storage.
-// The page re-saves that array whenever the technician list is touched, so
-// editing a detached copy looked like it worked and was then overwritten.
-function signInAccount(){
-  const list = (typeof technicians !== 'undefined' && Array.isArray(technicians))
-    ? technicians : [];
-  if(!list.length) return null;
-  const session = lsGet('session');
-  if(session && session.techId){
-    const mine = list.find(t => t.id === session.techId);
-    if(mine) return mine;
-  }
-  return list[0];
-}
-
+// ---------- The owner's own sign-in ----------
+// Edits the owner account, which is what the office site checks. Nothing to do
+// with technicians: those are managed on the Technicians page and only open the
+// field apps.
 function renderSignInFields(){
-  const who = signInAccount();
+  const owner = lsGet('ownerAccount') || {};
   const u = document.getElementById('acctUsername');
   const p = document.getElementById('acctPassword');
   const n = document.getElementById('acctDisplayName');
   if(!u || !p || !n) return;
-  u.value = who ? (who.username || '') : '';
-  p.value = who ? (who.password || '') : '';
-  n.value = who ? (who.name || '') : '';
+  u.value = owner.username || '';
+  p.value = owner.password || '';
+  n.value = owner.name || '';
 }
 
 function saveSignInDetails(){
@@ -5622,26 +5602,19 @@ function saveSignInDetails(){
 
   if(!username){ say('Enter a username.', false); return; }
   if(!password){ say('Enter a password.', false); return; }
-  if(!name){ say('Enter the name that should appear on reports.', false); return; }
+  if(!name){ say('Enter your name.', false); return; }
 
-  const who = signInAccount();
-  if(!who){ say('No account to change.', false); return; }
+  // A technician using the same username would be confusing at best
+  const techs = lsGet('technicians') || [];
+  if(techs.some(t => (t.username || '').toLowerCase() === username.toLowerCase())){
+    say('One of your technicians already uses that username. Pick another.', false);
+    return;
+  }
 
-  // Somebody else already using that username would lock one of them out
-  const clash = technicians.find(t => t.id !== who.id
-    && (t.username || '').toLowerCase() === username.toLowerCase());
-  if(clash){ say('Somebody else is already using that username.', false); return; }
-
-  who.username = username;
-  who.password = password;
-  who.name = name;
-  saveTechnicians();
-
-  // Anyone signed in on this device stays signed in — the account is the same
-  // one, it just answers to a different username now.
-  say('Saved. Use these next time you sign in.', true);
-  if(typeof renderTechnicianList === 'function') renderTechnicianList();
-  if(typeof populateTechnicianSelect === 'function') populateTechnicianSelect();
+  lsSet('ownerAccount', {name: name, username: username, password: password});
+  lsSet('ownerSession', true);
+  siteUser = {name: name, username: username, password: password};
+  say('Saved. Use these next time you sign in to this site.', true);
 }
 
 function renderAccountPlan(){
