@@ -435,7 +435,6 @@ select#customerSelect{font-weight:600;}
     <div class="field"><label>Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Your password"></div>
     <p id="loginError" style="display:none;font-size:12.5px;color:#B8492E;margin:0 0 12px;"></p>
     <button class="btn btn-primary" id="btnLogin" style="width:100%;">Sign in</button>
-    <button class="btn btn-ghost" id="btnDevSkip" style="width:100%;margin-top:8px;font-size:12.5px;">Skip sign-in (dev)</button>
   </div>
 </div>
 
@@ -8296,7 +8295,6 @@ function hideLogin(){
 function attachLoginHandlers(afterLogin){
   const btn = document.getElementById('btnLogin');
   const pass = document.getElementById('loginPassword');
-  const skip = document.getElementById('btnDevSkip');
 
   function attempt(){
     const u = document.getElementById('loginUsername').value.trim().toLowerCase();
@@ -8304,7 +8302,7 @@ function attachLoginHandlers(afterLogin){
     const err = document.getElementById('loginError');
     const techs = lsGet('technicians') || [];
     if(techs.length === 0){
-      err.textContent = 'No accounts set up yet — add technicians on the website first, or use Skip sign-in.';
+      err.textContent = 'No accounts set up yet — add technicians on the website first.';
       err.style.display = 'block';
       return;
     }
@@ -8322,13 +8320,6 @@ function attachLoginHandlers(afterLogin){
 
   if(btn) btn.addEventListener('click', attempt);
   if(pass) pass.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') attempt(); });
-  if(skip) skip.addEventListener('click', ()=>{
-    const techs = lsGet('technicians') || [];
-    const who = techs[0] || null;
-    // Remember it, so reopening the app doesn't drop back to the login screen
-    if(who) lsSet('session', {techId: who.id});
-    afterLogin(who);
-  });
 }
 
 function logout(){
@@ -8347,8 +8338,6 @@ async function init(){
   document.getElementById('settingWaterBalance').checked = appSettings.showWaterBalance === true;
   updateVoiceModeIndicator();
 
-  // DEV BYPASS — ?dev=1 skips sign-in. Remove before real use.
-  const devMode = new URLSearchParams(window.location.search).get('dev') === '1';
   const session = loadSession();
 
   function enter(user){
@@ -8361,7 +8350,7 @@ async function init(){
 
   attachLoginHandlers(enter);
 
-  if(devMode || session){
+  if(session){
     const techs = lsGet('technicians') || [];
     enter(session || techs.find(t => !t.isAdmin) || techs[0] || null);
   } else {

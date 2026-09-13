@@ -444,7 +444,6 @@ select#customerSelect{font-weight:600;}
     <div class="field"><label>Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Your password"></div>
     <p id="loginError" style="display:none;font-size:12.5px;color:#B8492E;margin:0 0 12px;"></p>
     <button class="btn btn-primary" id="btnLogin" style="width:100%;">Sign in</button>
-    <button class="btn btn-ghost" id="btnDevSkip" style="width:100%;margin-top:8px;font-size:12.5px;">Skip sign-in (dev)</button>
   </div>
 </div>
 
@@ -9981,7 +9980,6 @@ function hideLogin(){
 function attachAdminLoginHandlers(){
   const btn = document.getElementById('btnLogin');
   const pass = document.getElementById('loginPassword');
-  const skip = document.getElementById('btnDevSkip');
 
   function attempt(){
     const u = document.getElementById('loginUsername').value.trim().toLowerCase();
@@ -9989,7 +9987,7 @@ function attachAdminLoginHandlers(){
     const err = document.getElementById('loginError');
     const techs = lsGet('technicians') || [];
     if(techs.length === 0){
-      err.textContent = 'No accounts set up yet — add technicians on the website first, or use Skip sign-in.';
+      err.textContent = 'No accounts set up yet — add technicians on the website first.';
       err.style.display = 'block';
       return;
     }
@@ -10010,20 +10008,9 @@ function attachAdminLoginHandlers(){
 
   if(btn) btn.addEventListener('click', attempt);
   if(pass) pass.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') attempt(); });
-  if(skip) skip.addEventListener('click', ()=>{
-    const techs = lsGet('technicians') || [];
-    currentUser = techs[0] || null;
-    // Remember it, so reopening the app doesn't drop back to the login screen
-    if(currentUser) lsSet('session', {techId: currentUser.id});
-    const who = document.getElementById('adminSignedInAs');
-    if(who) who.textContent = currentUser ? currentUser.name : 'Dev mode';
-    hideLogin();
-  });
 }
 
 function guardAdminSession(){
-  // DEV BYPASS — ?dev=1 skips sign-in. Remove before real use.
-  const devMode = new URLSearchParams(window.location.search).get('dev') === '1';
   const saved = lsGet('session');
   const techs = lsGet('technicians') || [];
   const tech = saved ? techs.find(t => t.id === saved.techId) : null;
@@ -10031,7 +10018,7 @@ function guardAdminSession(){
   attachAdminLoginHandlers();
 
   // Any valid sign-in gets in — there is no separate admin tier any more
-  if(devMode || tech){
+  if(tech){
     currentUser = tech || techs[0] || null;
     hideLogin();
     return true;
