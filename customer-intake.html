@@ -391,6 +391,18 @@ input::placeholder{color:#A9BCB9;}
 </style>
 </head>
 <body>
+<div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:400;background:linear-gradient(168deg,#16585C 0%,#114B4F 55%,#0D3E42 100%);align-items:center;justify-content:center;padding:24px;">
+  <div style="background:#fff;border-radius:16px;padding:26px 22px;max-width:360px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,0.28);">
+    <h2 style="font-size:20px;margin:0 0 4px;">PoolLog</h2>
+    <p style="font-size:12.5px;color:#5E7371;margin:0 0 18px;">Sign in to manage your customers and settings.</p>
+    <div class="field"><label>Username</label><input id="siteUsername" autocomplete="username" placeholder="Your username"></div>
+    <div class="field"><label>Password</label><input id="sitePassword" type="password" autocomplete="current-password" placeholder="Your password"></div>
+    <p id="siteLoginError" style="display:none;font-size:12.5px;color:#B8492E;margin:0 0 12px;"></p>
+    <button class="btn btn-primary" id="btnSiteLogin" style="width:100%;">Sign in</button>
+  </div>
+</div>
+
+
 
 <div class="app-shell">
   <aside class="sidebar">
@@ -1107,6 +1119,7 @@ input::placeholder{color:#A9BCB9;}
     <div class="card">
       <div class="section-head">
         <h2>Account</h2>
+        <button class="btn btn-ghost" id="btnSiteLogout" style="width:auto;margin-left:auto;">Sign out</button>
       </div>
       <div class="seg-control" id="accountTabControl">
         <button class="history-type-btn active" data-acct="business">Business</button>
@@ -5494,6 +5507,74 @@ function renderAccountButton(){
   }
 }
 
+
+
+// ---------- Office site sign-in ----------
+// The site holds every customer, route and setting, so it is not left open.
+// It uses the same accounts as the field apps: whatever a technician signs in
+// with there works here. The session is shared too, so signing in on one does
+// not mean signing in again on the other.
+let siteUser = null;
+
+function showSiteLogin(){
+  const el = document.getElementById('loginScreen');
+  if(el) el.style.display = 'flex';
+}
+function hideSiteLogin(){
+  const el = document.getElementById('loginScreen');
+  if(el) el.style.display = 'none';
+}
+
+function siteLogout(){
+  lsSet('session', null);
+  siteUser = null;
+  const u = document.getElementById('siteUsername');
+  const p = document.getElementById('sitePassword');
+  if(u) u.value = '';
+  if(p) p.value = '';
+  showSiteLogin();
+}
+
+function attemptSiteLogin(){
+  const err = document.getElementById('siteLoginError');
+  const say = (msg)=>{ if(err){ err.textContent = msg; err.style.display = 'block'; } };
+
+  const u = document.getElementById('siteUsername').value.trim().toLowerCase();
+  const p = document.getElementById('sitePassword').value;
+  const techs = lsGet('technicians') || [];
+
+  if(!techs.length){ say('No accounts set up on this device yet.'); return; }
+
+  const match = techs.find(t => (t.username || '').toLowerCase() === u && t.password === p);
+  if(!match){ say("That username and password don't match."); return; }
+
+  if(err) err.style.display = 'none';
+  lsSet('session', {techId: match.id});
+  siteUser = match;
+  document.getElementById('sitePassword').value = '';
+  hideSiteLogin();
+}
+
+function guardSiteSession(){
+  const saved = lsGet('session');
+  const techs = lsGet('technicians') || [];
+  const who = saved ? techs.find(t => t.id === saved.techId) : null;
+  if(who){
+    siteUser = who;
+    hideSiteLogin();
+    return true;
+  }
+  showSiteLogin();
+  return false;
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const btn = document.getElementById('btnSiteLogin');
+  const pass = document.getElementById('sitePassword');
+  if(btn) btn.addEventListener('click', attemptSiteLogin);
+  if(pass) pass.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') attemptSiteLogin(); });
+  guardSiteSession();
+});
 
 // ---------- Your own sign-in ----------
 // Everyone starts on the same account that ships with the app, so the point of
@@ -13893,6 +13974,8 @@ addPasswordReveals();
 
 
 document.getElementById('btnSaveSignIn').addEventListener('click', saveSignInDetails);
+
+document.getElementById('btnSiteLogout').addEventListener('click', siteLogout);
 </script>
 </body>
 </html>
